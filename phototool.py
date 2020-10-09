@@ -21,13 +21,20 @@ def compute_hashes(working_dir, glob):
     def is_image(filename: Path):
         return filename.suffix.lower() in [".png", ".jpg", ".jpeg", "bmp", ".gif", ".svg"]
 
-    duplicates = defaultdict(list)
+    hashes = dict()
     for path in working_dir.glob(glob):
         if is_image(path):
             im = Image.open(path)
             hash = imagehash.average_hash(im)
-            duplicates[hash].append(path)
-    return duplicates
+            hashes[path] = hash
+    return hashes
+
+def compute_hamming_distance(photos: dict):
+    matrix = [[0] * len(photos) for i in range(len(photos))]
+    for i, lhs in enumerate(photos):
+        for j, rhs in enumerate(photos):
+            matrix[i][j] = abs(rhs-lhs)
+    return matrix
 
 def find_duplicates(hashes, threshold=5):
     """
@@ -53,7 +60,11 @@ def main():
     working_dir = Path(args.directory) if args.directory else Path()
     glob = "**/*" if args.recursive else "*"
     photo_hashes = compute_hashes(working_dir, glob)
-    near_duplicates = find_duplicates(photo_hashes, threshold=5)
+    hamming_distance = compute_hamming_distance(photo_hashes)
+    for i, photo in enumerate(hamming_distance):
+        near_duplicates = [j for j, distance in enumerate(photo) if distance <= 5]
+        if len(near_duplicates) == 1:
+            unique.append(photo)
 
     for key, value in near_duplicates.items():
         print(f"{False}")

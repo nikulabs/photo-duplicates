@@ -14,6 +14,13 @@ class PhotoDuplicates(unittest.TestCase):
         exp_groups = {tuple(k):[None]*len(k) for k in exp_output}
         actual_groups = phototool.find_duplicates(hashes)
         self.assertDictEqual(exp_groups, actual_groups)
+    
+    @parameterized.expand([
+        [[1,2,3],[[0,1,2],[1,0,1],[2,1,0]]]
+    ])
+    def test_compute_hamming_distance(self, input, exp_output):
+        actual = phototool.compute_hamming_distance(input)
+        self.assertEqual(exp_output, actual)
 
 
 if __name__ == '__main__':
