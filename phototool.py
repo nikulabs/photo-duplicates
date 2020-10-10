@@ -1,11 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import argparse
-from collections import defaultdict
+import time
+from datetime import timedelta
 from itertools import chain
 from pathlib import Path
-from PIL import Image
+from typing import Dict, List
+
 import imagehash
+from PIL import Image
+from imagehash import ImageHash
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -16,70 +21,72 @@ def parse_args():
                                              action="store_true")
     return parser.parse_args()
 
-def compute_hashes(working_dir, glob):
 
+def find_photos(working_dir: Path, glob: str) -> List[Path]:
     def is_image(filename: Path):
         return filename.suffix.lower() in [".png", ".jpg", ".jpeg", "bmp", ".gif", ".svg"]
+    return [path for path in working_dir.glob(glob) if is_image(path)]
 
-    hashes = dict()
-    for path in working_dir.glob(glob):
-        if is_image(path):
-            im = Image.open(path)
-            hash = imagehash.average_hash(im)
-            hashes[path] = hash
-    return hashes
+def compute_hashes(photos: List[Path]) -> Dict[Path, ImageHash]:
+    return {photo:imagehash.average_hash(Image.open(photo)) for photo in photos}
 
-def compute_hamming_distance(photos: dict):
+def compute_hamming_distance(photos: Dict[Path, ImageHash], verbose=False) -> List[List[int]]:
     matrix = [[0] * len(photos) for i in range(len(photos))]
-    for i, lhs in enumerate(photos):
-        for j, rhs in enumerate(photos):
+    for i, lhs in enumerate(photos.values()):
+        for j, rhs in enumerate(photos.values()):
             matrix[i][j] = abs(rhs-lhs)
+    if verbose:
+        for row in matrix:
+            print(row)
     return matrix
 
-def find_duplicates(hashes, threshold=5):
-    """
-    Group elements in a dictionary by the key value.
-    As long as sorted consecutive keys are less different than the threshold, group the elements together.
-    Imposes ordering on the dictionary.
-    """
-    sorted_hashes = sorted(hashes.keys())
-    groups = [[sorted_hashes[0]]] # Seed first group with first hash
-    for lhs, rhs in zip(sorted_hashes[:-1], sorted_hashes[1:]):
-        if abs(lhs-rhs) <= threshold:
-            groups[len(groups)-1].append(rhs)
-        else:
-            groups.append([rhs])
-    duplicates = {}
-    for group in groups:
-        duplicates[tuple(group)] = list(chain.from_iterable([hashes[hash] for hash in group]))
-    return duplicates
+def group_photos_by_distance(photos: List[Path], distance_matrix: List[List[int]], verbose=False) -> List[List[Path]]:
+    grouped_indices = []
+    matched = []
+    for i, row in enumerate(distance_matrix):
+        if i in matched:
+            continue
+        matches_in_row = [i for i, distance in enumerate(row) if distance <= 5]
+        grouped_indices.append(matches_in_row)
+        matched.extend(matches_in_row)
+    
+    if verbose:
+        for index in grouped_indices:
+            print(index)
+
+    grouped_photos = []
+    for indices in grouped_indices:
+        duplicate_photos = [photos[i] for i in indices]
+        grouped_photos.append(duplicate_photos)
+
+    if verbose:
+        for photo in grouped_photos:
+            print(str(photo))
+
 
 def main():
     args = parse_args()
 
     working_dir = Path(args.directory) if args.directory else Path()
     glob = "**/*" if args.recursive else "*"
-    photo_hashes = compute_hashes(working_dir, glob)
-    hamming_distance = compute_hamming_distance(photo_hashes)
-    for i, photo in enumerate(hamming_distance):
-        near_duplicates = [j for j, distance in enumerate(photo) if distance <= 5]
-        if len(near_duplicates) == 1:
-            unique.append(photo)
 
-    for key, value in near_duplicates.items():
-        print(f"{False}")
+    start = time.time()
+    photo_paths = find_photos(working_dir, glob)
+    print(f"Time to find photos: {timedelta(seconds=time.time() - start)}")
 
+    start = time.time()
+    photo_hashes = compute_hashes(photo_paths)
+    print(f"Time to compute hashes: {timedelta(seconds=time.time() - start)}")
 
-    keys = list(photo_hashes.keys())
-    differences = [(lhs, rhs, abs(lhs-rhs)) for lhs, rhs in zip(keys[:-1], keys[1:])]
-    for lhs, rhs, difference in differences:
-        print(f"{lhs} - {rhs} = {difference}")
+    start = time.time()
+    hamming_distance_matrix = compute_hamming_distance(photo_hashes)
+    print(f"Time to create hamming distance matrix: {timedelta(seconds=time.time() - start)}")
 
-    for key, value in photo_hashes.items():
-        print(f"{key}:\n\t", end='')
-        print("\n\t".join([str(path) for path in value]))
-
+    start = time.time()
+    grouped_photos = group_photos_by_distance(photo_paths, hamming_distance_matrix)
+    print(f"Time to group photos by distance: {timedelta(seconds=time.time() - start)}")
     return 0
+
 
 if __name__ == "__main__":
     main()
