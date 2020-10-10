@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Dict, List
 
 import imagehash
+import progressbar
 from PIL import Image
 from imagehash import ImageHash
 
@@ -28,13 +29,24 @@ def find_photos(working_dir: Path, glob: str) -> List[Path]:
     return [path for path in working_dir.glob(glob) if is_image(path)]
 
 def compute_hashes(photos: List[Path]) -> Dict[Path, ImageHash]:
-    return {photo:imagehash.average_hash(Image.open(photo)) for photo in photos}
+    
+    bar = progressbar.ProgressBar(maxval=len(photos),
+        widgets=[progressbar.Bar('=', '[', ']'), ' ', progressbar.Percentage()])
+    bar.start()
+    hashes = {}
+    for i, photo in enumerate(photos):
+        hashes[photo] = imagehash.average_hash(Image.open(photo))
+        bar.update(i+1)
+    bar.finish()
+    return hashes
 
 def compute_hamming_distance(photos: Dict[Path, ImageHash], verbose=False) -> List[List[int]]:
     matrix = [[0] * len(photos) for i in range(len(photos))]
+
     for i, lhs in enumerate(photos.values()):
         for j, rhs in enumerate(photos.values()):
             matrix[i][j] = abs(rhs-lhs)
+
     if verbose:
         for row in matrix:
             print(row)
