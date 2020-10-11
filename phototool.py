@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import argparse
+import shutil
+import tempfile
 import time
 from datetime import timedelta
 from itertools import chain
@@ -18,6 +20,7 @@ def parse_args():
         description='Finds duplicates in the given directory.'
     )
     parser.add_argument("-d", "--directory", help="The directory in which to search")
+    parser.add_argument("-o", "--output", help="The directory to which to copy the files")
     parser.add_argument("-r", "--recursive", help="Also search subdirectories",
                                              action="store_true")
     return parser.parse_args()
@@ -74,6 +77,8 @@ def group_photos_by_distance(photos: List[Path], distance_matrix: List[List[int]
     if verbose:
         for photo in grouped_photos:
             print(str(photo))
+    
+    return grouped_photos
 
 
 def main():
@@ -81,6 +86,7 @@ def main():
 
     working_dir = Path(args.directory) if args.directory else Path()
     glob = "**/*" if args.recursive else "*"
+    out_dir = Path(args.output) if args.output else Path()
 
     start = time.time()
     photo_paths = find_photos(working_dir, glob)
@@ -97,6 +103,17 @@ def main():
     start = time.time()
     grouped_photos = group_photos_by_distance(photo_paths, hamming_distance_matrix)
     print(f"Time to group photos by distance: {timedelta(seconds=time.time() - start)}")
+
+    unique_dir = tempfile.mkdtemp(prefix="unique", dir=out_dir)
+    for group in grouped_photos:
+        if len(group) == 1:
+            shutil.copy2(group[0], unique_dir)
+            continue
+
+        newdir = tempfile.mkdtemp(dir=out_dir)
+        for photo in group:
+            shutil.copy2(photo, newdir)
+
     return 0
 
 
